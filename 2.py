@@ -50,18 +50,18 @@ h1 { font-size: 2.2rem !important; background: linear-gradient(135deg, #7c3aed, 
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 { color: #ffffff !important; }
 [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown { color: rgba(255,255,255,0.85) !important; }
 [data-testid="stSidebar"] input, [data-testid="stSidebar"] textarea {
-    background: rgba(255,255,255,0.18) !important; border: 2px solid rgba(255,255,255,0.25) !important;
-    border-radius: 12px !important; color: #ffffff !important; padding: 10px 14px !important;
+    background: rgba(255,255,255,0.9) !important; border: 2px solid rgba(255,255,255,0.3) !important;
+    border-radius: 12px !important; color: #1e1b4b !important; padding: 10px 14px !important;
     font-weight: 500 !important;
 }
-[data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder { color: rgba(255,255,255,0.45) !important; }
+[data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder { color: rgba(30,27,75,0.4) !important; }
 [data-testid="stSidebar"] [data-baseweb="select"] > div {
-    background: rgba(255,255,255,0.18) !important; border-color: rgba(255,255,255,0.25) !important; color: #ffffff !important; font-weight: 500 !important;
+    background: rgba(255,255,255,0.9) !important; border-color: rgba(255,255,255,0.3) !important; color: #1e1b4b !important; font-weight: 500 !important;
 }
-[data-testid="stSidebar"] [data-baseweb="select"] * { color: #ffffff !important; }
-[data-testid="stSidebar"] [role="option"], [data-testid="stSidebar"] [role="listbox"] { background: #2d1b69 !important; color: #ffffff !important; }
-[data-testid="stSidebar"] ul[role="listbox"] li { color: #ffffff !important; background: #2d1b69 !important; }
-[data-testid="stSidebar"] ul[role="listbox"] li:hover { background: #7c3aed !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] * { color: #1e1b4b !important; }
+[data-testid="stSidebar"] [role="option"], [data-testid="stSidebar"] [role="listbox"] { background: #ffffff !important; color: #1e1b4b !important; }
+[data-testid="stSidebar"] ul[role="listbox"] li { color: #1e1b4b !important; background: #ffffff !important; }
+[data-testid="stSidebar"] ul[role="listbox"] li:hover { background: #ede9fe !important; color: #1e1b4b !important; }
 [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.1) !important; margin: 1rem 0 !important; }
 [data-testid="stSidebar"] .stAlert { background: rgba(255,255,255,0.1) !important; border-radius: 12px !important; color: #fff !important; }
 
@@ -201,7 +201,6 @@ def get_weather(city):
         return None
 
 # ── Baidu Geocoding ──
-@st.cache_data(ttl=60, show_spinner=False)
 def baidu_geocode(city):
     if not BAIDU_AK:
         return None
@@ -217,7 +216,6 @@ def baidu_geocode(city):
     return None
 
 # ── Baidu Place Search ──
-@st.cache_data(ttl=120, show_spinner=False)
 def baidu_place_search(query, lng, lat, radius=5000):
     if not BAIDU_AK:
         return []
