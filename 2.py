@@ -44,8 +44,8 @@ h1 { font-size: 2.2rem !important; background: linear-gradient(135deg, #7c3aed, 
 
 /* ── Sidebar (Light theme, matching main area) ── */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #fdf2f8 0%, #fce7f3 25%, #ede9fe 60%, #f0f9ff 100%) !important;
-    border-right: 1px solid rgba(124,58,237,0.1) !important;
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 25%, #e0f2fe 55%, #f0f9ff 100%) !important;
+    border-right: 1px solid rgba(59,130,246,0.12) !important;
 }
 [data-testid="stSidebar"] .block-container { padding: 1.5rem 1.2rem; }
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 { color: #1e1b4b !important; }
@@ -347,13 +347,14 @@ def render_poi_grid(pois, emoji="📍"):
     if not pois:
         return '<p style="text-align:center;color:#9b97b8;padding:1.5rem;">🔍 输入目的地后自动搜索周边热门地点</p>'
 
-    # Beautiful gradient pairs for POI cards
+    # Beautiful gradient pairs for fallback
     gradients = [
         ("#ff6b8a,#e85d9e"), ("#7c3aed,#6366f1"), ("#f59e0b,#f97316"),
         ("#10b981,#34d399"), ("#ec4899,#f472b6"), ("#3b82f6,#06b6d4"),
         ("#8b5cf6,#a78bfa"), ("#ef4444,#f87171"), ("#14b8a6,#2dd4bf"),
     ]
 
+    import urllib.parse
     cards = ""
     for i, poi in enumerate(pois[:9]):
         name = poi.get("name", "未知")
@@ -364,10 +365,17 @@ def render_poi_grid(pois, emoji="📍"):
         stars = "⭐" * min(5, max(1, int(float(score) // 20))) if score else ""
         grad = gradients[i % len(gradients)]
 
+        # Try Picsum for real photos (Cloudflare CDN, works in China)
+        seed = urllib.parse.quote(f"{name}")
+        img_url = f"https://picsum.photos/seed/{seed}/400/300"
+
         cards += f"""
         <div class="poi-card" style="animation-delay:{delay}s;">
-            <div class="poi-img" style="background:linear-gradient(135deg,{grad});display:flex;align-items:center;justify-content:center;">
-                <span style="font-size:3rem;">{emoji}</span>
+            <div class="poi-img" style="position:relative;background:linear-gradient(135deg,{grad});">
+                <img src="{img_url}" alt="{name}" loading="lazy"
+                    style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"
+                    onerror="this.style.display='none'"/>
+                <span style="font-size:3rem;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">{emoji}</span>
             </div>
             <div class="poi-body">
                 <h4 title="{name}">{name[:18]}{'…' if len(name) > 18 else ''}</h4>
@@ -594,36 +602,51 @@ if generate_clicked:
             else:
                 st.sidebar.warning("⚠️ 天气查询失败")
 
-        with st.spinner("✨ AI 正在为您量身定制行程，请稍候…"):
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            msg = user_input
-            if weather_info:
-                msg += (
-                    f"\n\n【天气】{weather_city or destination}: "
-                    f"{weather_info['weather']} {weather_info['temp']}（体感{weather_info['feels_like']}）"
-                    f"湿度{weather_info['humidity']} 风速{weather_info['wind']}"
-                    f"\n请结合天气调整行程。"
-                )
-            if additional_req:
-                msg += f"\n\n额外要求：{additional_req}"
-            messages.append({"role": "user", "content": msg})
+        # Visible loading state
+        loading_placeholder = st.empty()
+        loading_placeholder.markdown("""
+        <div style="text-align:center; padding:3rem 2rem; animation:pulse 2s ease-in-out infinite;">
+            <span style="font-size:3rem; display:block; margin-bottom:1rem;">✨</span>
+            <h3 style="color:#7c3aed !important; margin:0 0 0.5rem;">AI 正在为您量身定制行程…</h3>
+            <p style="color:#8b889e; margin:0;">正在分析目的地、筛选景点、规划路线，请稍候</p>
+        </div>
+        <style>
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+        </style>
+        """, unsafe_allow_html=True)
 
-            response = client.chat.completions.create(
-                model=MODEL, messages=messages, temperature=1, max_tokens=4000
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        msg = user_input
+        if weather_info:
+            msg += (
+                f"\n\n【天气】{weather_city or destination}: "
+                f"{weather_info['weather']} {weather_info['temp']}（体感{weather_info['feels_like']}）"
+                f"湿度{weather_info['humidity']} 风速{weather_info['wind']}"
+                f"\n请结合天气调整行程。"
             )
-            result = response.choices[0].message.content
+        if additional_req:
+            msg += f"\n\n额外要求：{additional_req}"
+        messages.append({"role": "user", "content": msg})
 
-            st.success("✅ 行程规划完成！")
-            st.markdown(f'<div class="result-container">{result}</div>', unsafe_allow_html=True)
+        response = client.chat.completions.create(
+            model=MODEL, messages=messages, temperature=1, max_tokens=4000
+        )
+        result = response.choices[0].message.content
 
-            # Download
-            filename = f"{destination or '旅行'}_行程规划.txt"
-            st.download_button(
-                label="📥 下载行程规划",
-                data=result.encode("utf-8"),
-                file_name=filename,
-                mime="text/plain",
-            )
+        # Clear loading placeholder
+        loading_placeholder.empty()
+
+        st.success("✅ 行程规划完成！")
+        st.markdown(f'<div class="result-container">{result}</div>', unsafe_allow_html=True)
+
+        # Download
+        filename = f"{destination or '旅行'}_行程规划.txt"
+        st.download_button(
+            label="📥 下载行程规划",
+            data=result.encode("utf-8"),
+            file_name=filename,
+            mime="text/plain",
+        )
 
 # ═══════════════════════════════════════
 #  FOOTER
