@@ -450,6 +450,107 @@ div[data-testid="stSuccess"] {
     line-height: 1.8;
 }
 
+/* ── Map Container ── */
+.map-wrapper {
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(124,58,237,0.12);
+    border: 1px solid rgba(255,255,255,0.8);
+    margin: 1.5rem 0;
+    animation: fadeInUp 0.6s ease-out;
+}
+
+/* ── POI Card Grid ── */
+.poi-grid {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 0.5rem 0 1.5rem;
+}
+
+.poi-card {
+    flex: 1;
+    min-width: 180px;
+    max-width: 280px;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.9);
+    border-radius: 20px;
+    padding: 1.25rem 1rem;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(124,58,237,0.06);
+    transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1.2);
+}
+
+.poi-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 36px rgba(124,58,237,0.15);
+    border-color: rgba(232,93,158,0.25);
+}
+
+.poi-card .icon {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.poi-card h4 {
+    font-size: 0.95rem;
+    color: #1e1b4b;
+    margin: 0.3rem 0;
+    font-weight: 700;
+}
+
+.poi-card .poi-score {
+    font-size: 0.8rem;
+    color: #e85d9e;
+    margin: 0.2rem 0;
+}
+
+.poi-card .poi-addr {
+    font-size: 0.78rem;
+    color: #8b889e;
+    margin: 0.2rem 0;
+    line-height: 1.4;
+}
+
+.poi-card .poi-extra {
+    font-size: 0.75rem;
+    color: #a09db8;
+    margin-top: 0.3rem;
+}
+
+/* ── Tab Buttons ── */
+.poi-tabs {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin: 0.5rem 0 1rem;
+    flex-wrap: wrap;
+}
+
+.poi-tab {
+    padding: 0.5rem 1.25rem;
+    border-radius: 50px;
+    border: 1.5px solid rgba(124,58,237,0.2);
+    background: rgba(255,255,255,0.5);
+    color: #4a4567;
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.poi-tab:hover, .poi-tab.active {
+    background: linear-gradient(135deg, #7c3aed, #e85d9e);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+}
+
 /* ── Footer ── */
 .footer {
     text-align: center;
@@ -496,6 +597,7 @@ try:
     API_KEY = st.secrets["OPENAI_API_KEY"]
     BASE_URL = st.secrets.get("OPENAI_BASE_URL", "https://tokenhub.tencentmaas.com/v1/")
     MODEL = st.secrets.get("MODEL_NAME", "kimi-k2.7-code")
+    BAIDU_AK = st.secrets.get("BAIDU_MAP_AK", "")
 except KeyError:
     st.error("⚠️ 未找到 API Key！请在 .streamlit/secrets.toml 或 Streamlit Cloud 中配置。")
     st.stop()
@@ -534,6 +636,138 @@ def get_weather(city):
         }
     except Exception:
         return None
+
+# ── Baidu Maps API Functions ──
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def baidu_geocode(city):
+    """Convert city name to coordinates using Baidu Geocoding API"""
+    if not BAIDU_AK:
+        return None
+    try:
+        url = f"https://api.map.baidu.com/geocoding/v3/?address={city}&output=json&ak={BAIDU_AK}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data.get("status") == 0:
+            loc = data["result"]["location"]
+            return {"lng": loc["lng"], "lat": loc["lat"]}
+    except Exception:
+        pass
+    return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def baidu_place_search(query, lng, lat, radius=5000):
+    """Search for POIs near a location using Baidu Place API"""
+    if not BAIDU_AK:
+        return []
+    try:
+        url = (
+            f"https://api.map.baidu.com/place/v2/search?"
+            f"query={query}&location={lat},{lng}&radius={radius}"
+            f"&output=json&ak={BAIDU_AK}&scope=2&page_size=10"
+        )
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data.get("status") == 0:
+            return data.get("results", [])[:10]
+    except Exception:
+        pass
+    return []
+
+
+def render_baidu_map(center_lng, center_lat, markers=None, height=420):
+    """Generate an interactive Baidu Map iframe"""
+    if markers is None:
+        markers = []
+
+    # Build marker JS
+    marker_js = ""
+    for i, m in enumerate(markers):
+        lng, lat, name, addr = m["lng"], m["lat"], m.get("name", ""), m.get("addr", "")
+        icon_color = m.get("color", "#7c3aed")
+        marker_js += f"""
+        (function() {{
+            var pt = new BMap.Point({lng}, {lat});
+            var mk = new BMap.Marker(pt);
+            var label = new BMap.Label("{name}", {{offset: new BMap.Size(20, -10)}});
+            label.setStyle({{
+                color: "#1e1b4b", fontSize: "12px", fontWeight: "600",
+                padding: "4px 10px", borderRadius: "20px",
+                background: "rgba(255,255,255,0.9)", border: "1px solid rgba(124,58,237,0.3)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)", whiteSpace: "nowrap"
+            }});
+            mk.setLabel(label);
+            var info = new BMap.InfoWindow(
+                '<div style="font-family:Inter,sans-serif;padding:4px;">' +
+                '<h4 style="margin:0 0 4px;color:#7c3aed;">{name}</h4>' +
+                '<p style="margin:0;font-size:12px;color:#666;">{addr}</p></div>',
+                {{width: 200, title: ""}}
+            );
+            mk.addEventListener("click", function() {{ this.openInfoWindow(info); }});
+            map.addOverlay(mk);
+        }})();
+        """
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  * {{ margin:0; padding:0; }}
+  html, body, #map {{ width:100%; height:{height}px; border-radius:20px; overflow:hidden; }}
+  .bmap-copyright {{ display:none !important; }}
+  .anchorBL {{ display:none !important; }}
+</style>
+<script src="https://api.map.baidu.com/api?v=3.0&ak={BAIDU_AK}"></script>
+</head>
+<body>
+<div id="map"></div>
+<script>
+try {{
+    var map = new BMap.Map("map");
+    var center = new BMap.Point({center_lng}, {center_lat});
+    map.centerAndZoom(center, 13);
+    map.enableScrollWheelZoom(true);
+    map.addControl(new BMap.NavigationControl({{anchor:BMAP_ANCHOR_TOP_RIGHT, offset:new BMap.Size(16,60)}}));
+    map.addControl(new BMap.ScaleControl({{anchor:BMAP_ANCHOR_BOTTOM_LEFT, offset:new BMap.Size(16,30)}}));
+    map.setMapStyle({{style:'midnight'}});
+    // Center marker with pulse circle
+    var centerMarker = new BMap.Marker(center);
+    map.addOverlay(centerMarker);
+    {marker_js}
+}} catch(e) {{ console.log("Map init error:", e); }}
+</script>
+</body>
+</html>"""
+    return html
+
+
+def render_poi_grid(pois, emoji="📍"):
+    """Render POI cards in a 3-column glassmorphism grid"""
+    if not pois:
+        return '<p style="text-align:center;color:#9b97b8;padding:1rem;">暂无数据，请输入目的地后搜索</p>'
+
+    cards = ""
+    for i, poi in enumerate(pois[:9]):
+        name = poi.get("name", "未知")
+        addr = poi.get("address", "") or ""
+        score = poi.get("score", "") or ""
+        price = poi.get("price", "") or ""
+        tel = poi.get("telephone", "") or ""
+        delay = 0.1 * (i % 3)
+        stars = "⭐" * min(5, max(1, int(float(score) // 20))) if score else ""
+        cards += f"""
+        <div class="poi-card" style="animation: fadeInUp 0.5s ease-out {delay}s both;">
+            <span class="icon">{emoji}</span>
+            <h4>{name}</h4>
+            <p class="poi-score">{stars} {score or ''}</p>
+            <p class="poi-addr">📍 {addr[:40]}{'…' if len(addr) > 40 else ''}</p>
+            <p class="poi-extra">{'💰 ' + price if price else ''}{' 📞 ' + tel if tel else ''}</p>
+        </div>"""
+    return cards
+
 
 # ── Init OpenAI Client ──
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
@@ -625,6 +859,55 @@ with st.sidebar:
     weather_city = st.text_input("查询城市", placeholder="默认同目的地")
 
 # ═══════════════════════════════════════
+#  MAP + POI EXPLORER
+# ═══════════════════════════════════════
+if destination.strip() and BAIDU_AK:
+    coords = baidu_geocode(destination.strip())
+    if coords:
+        st.markdown("""
+        <div style="text-align:center; margin-bottom:0.5rem;">
+            <span class="section-badge">🗺️ 目的地探索</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Interactive Map
+        dest_marker = [{
+            "lng": coords["lng"], "lat": coords["lat"],
+            "name": destination.strip(), "addr": "",
+            "color": "#ff6b8a"
+        }]
+        map_html = render_baidu_map(coords["lng"], coords["lat"], dest_marker, height=420)
+        st.markdown('<div class="map-wrapper">', unsafe_allow_html=True)
+        st.components.v1.html(map_html, height=440, scrolling=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # POI Explorer Tabs
+        st.markdown("""
+        <div style="text-align:center; margin:1rem 0 0.25rem;">
+            <h4 style="color:#1e1b4b;">🔍 探索周边热门地点</h4>
+        </div>
+        """, unsafe_allow_html=True)
+
+        tab1, tab2, tab3 = st.tabs(["🎯 热门景点", "🏨 住宿推荐", "🍜 美食餐饮"])
+
+        with tab1:
+            with st.spinner("🔍 搜索周边景点…"):
+                spots = baidu_place_search("景点", coords["lng"], coords["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, "🎯")}</div>', unsafe_allow_html=True)
+
+        with tab2:
+            with st.spinner("🔍 搜索周边酒店…"):
+                hotels = baidu_place_search("酒店", coords["lng"], coords["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(hotels, "🏨")}</div>', unsafe_allow_html=True)
+
+        with tab3:
+            with st.spinner("🔍 搜索周边美食…"):
+                foods = baidu_place_search("美食", coords["lng"], coords["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(foods, "🍜")}</div>', unsafe_allow_html=True)
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════
 #  MAIN CONTENT
 # ═══════════════════════════════════════
 st.markdown("### 💬 描述您的旅行想法")
@@ -712,6 +995,40 @@ if generate_clicked:
                 file_name=filename,
                 mime="text/plain",
             )
+
+            # ── Itinerary Overview Map ──
+            if BAIDU_AK:
+                dest_city = destination.strip() or "广州"
+                dest_coords = baidu_geocode(dest_city)
+                if dest_coords:
+                    st.markdown("---")
+                    st.markdown("""
+                    <div style="text-align:center; margin-bottom:0.5rem;">
+                        <span class="section-badge">📍 行程地图总览</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # Collect POI markers
+                    all_markers = [{
+                        "lng": dest_coords["lng"], "lat": dest_coords["lat"],
+                        "name": dest_city, "addr": "目的地", "color": "#ff6b8a"
+                    }]
+                    for cat in ["景点", "酒店", "美食"]:
+                        pois = baidu_place_search(cat, dest_coords["lng"], dest_coords["lat"])
+                        for p in pois[:4]:
+                            if p.get("location"):
+                                all_markers.append({
+                                    "lng": p["location"]["lng"],
+                                    "lat": p["location"]["lat"],
+                                    "name": p.get("name", ""),
+                                    "addr": p.get("address", "") or "",
+                                    "color": "#7c3aed" if cat == "景点" else "#f59e0b" if cat == "酒店" else "#10b981"
+                                })
+
+                    overview_map = render_baidu_map(dest_coords["lng"], dest_coords["lat"], all_markers[:20], height=480)
+                    st.markdown('<div class="map-wrapper">', unsafe_allow_html=True)
+                    st.components.v1.html(overview_map, height=500, scrolling=False)
+                    st.markdown('</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════
 #  FOOTER
