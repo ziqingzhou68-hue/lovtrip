@@ -623,47 +623,14 @@ with map_col:
             </div>
             """, unsafe_allow_html=True)
 
-# ── POI Explorer (below map, full width) ──
-if destination.strip() and BAIDU_AK:
-    coords_q = baidu_geocode(destination.strip())
-    if coords_q:
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="text-align:center; margin-bottom:0.25rem;">
-            <span class="section-badge">🔍 周边热门探索</span>
-        </div>
-        """, unsafe_allow_html=True)
-        qtab1, qtab2, qtab3 = st.tabs(["🎯 热门景点", "🏨 住宿推荐", "🍜 美食餐饮"])
-        with qtab1:
-            spots = baidu_place_search("景点", coords_q["lng"], coords_q["lat"])
-            if not spots:
-                spots = baidu_place_search("旅游", coords_q["lng"], coords_q["lat"])
-            if not spots:
-                spots = baidu_place_search("公园", coords_q["lng"], coords_q["lat"])
-            st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, coords_q["lng"], coords_q["lat"], "🎯")}</div>', unsafe_allow_html=True)
-        with qtab2:
-            hotels = baidu_place_search("酒店", coords_q["lng"], coords_q["lat"])
-            if not hotels:
-                hotels = baidu_place_search("宾馆", coords_q["lng"], coords_q["lat"])
-            if not hotels:
-                hotels = baidu_place_search("住宿", coords_q["lng"], coords_q["lat"])
-            st.markdown(f'<div class="poi-grid">{render_poi_grid(hotels, coords_q["lng"], coords_q["lat"], "🏨")}</div>', unsafe_allow_html=True)
-        with qtab3:
-            foods = baidu_place_search("美食", coords_q["lng"], coords_q["lat"])
-            if not foods:
-                foods = baidu_place_search("餐厅", coords_q["lng"], coords_q["lat"])
-            if not foods:
-                foods = baidu_place_search("小吃", coords_q["lng"], coords_q["lat"])
-            st.markdown(f'<div class="poi-grid">{render_poi_grid(foods, coords_q["lng"], coords_q["lat"], "🍜")}</div>', unsafe_allow_html=True)
-
 # ═══════════════════════════════════════
-#  GENERATION RESULT (full width)
+#  AI GENERATION (runs before POI)
 # ═══════════════════════════════════════
+gen_result = None
 if generate_clicked:
     if not user_input.strip():
         st.warning("⚠️ 请输入您的旅行需求")
     else:
-        # Weather
         weather_info = None
         if enable_weather:
             query_city = weather_city or destination or "广州"
@@ -678,7 +645,6 @@ if generate_clicked:
             else:
                 st.sidebar.warning("⚠️ 天气查询失败")
 
-        # Loading animation IN MAP AREA
         map_placeholder.empty()
         map_placeholder.markdown("""
         <div style="
@@ -714,9 +680,8 @@ if generate_clicked:
         response = client.chat.completions.create(
             model=MODEL, messages=messages, temperature=1, max_tokens=4000
         )
-        result = response.choices[0].message.content
+        gen_result = response.choices[0].message.content
 
-        # Restore map after loading
         map_placeholder.empty()
         if destination.strip():
             coords = baidu_geocode(destination.strip())
@@ -736,32 +701,69 @@ if generate_clicked:
                     st.components.v1.html(map_html2, height=540, scrolling=False)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-        # ── Celebration + Completion banner ──
+        # 🎉 Celebration + Completion banner (between map and POI)
         st.balloons()
         st.markdown("""
         <div style="
             background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(232,93,158,0.08));
-            border: 1px solid rgba(124,58,237,0.15); border-radius: 20px;
-            padding: 1.2rem 1.5rem; margin: 0.5rem 0 1rem;
+            border: 2px solid rgba(124,58,237,0.2); border-radius: 20px;
+            padding: 1.2rem 1.5rem; margin: 0.5rem 0 0;
             display: flex; align-items: center; gap: 1rem; animation: fadeInUp 0.5s ease-out;
         ">
             <span style="font-size:2.5rem;">🎉</span>
             <div style="flex:1;">
-                <h4 style="color:#7c3aed; margin:0 0 0.2rem; font-size:1.1rem;">行程规划完成！向下滑动查看完整行程 👇</h4>
+                <h4 style="color:#7c3aed; margin:0 0 0.2rem; font-size:1.15rem;">行程规划完成！向下滑动查看完整行程 👇</h4>
                 <p style="color:#8b889e; margin:0; font-size:0.85rem;">AI 已为您量身定制专属旅行方案</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown(f'<div class="result-container">{result}</div>', unsafe_allow_html=True)
+# ── POI Explorer (between completion banner and result) ──
+if destination.strip() and BAIDU_AK:
+    coords_q = baidu_geocode(destination.strip())
+    if coords_q:
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="text-align:center; margin-bottom:0.25rem;">
+            <span class="section-badge">🔍 周边热门探索</span>
+        </div>
+        """, unsafe_allow_html=True)
+        qtab1, qtab2, qtab3 = st.tabs(["🎯 热门景点", "🏨 住宿推荐", "🍜 美食餐饮"])
+        with qtab1:
+            spots = baidu_place_search("景点", coords_q["lng"], coords_q["lat"])
+            if not spots:
+                spots = baidu_place_search("旅游", coords_q["lng"], coords_q["lat"])
+            if not spots:
+                spots = baidu_place_search("公园", coords_q["lng"], coords_q["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, coords_q["lng"], coords_q["lat"], "🎯")}</div>', unsafe_allow_html=True)
+        with qtab2:
+            hotels = baidu_place_search("酒店", coords_q["lng"], coords_q["lat"])
+            if not hotels:
+                hotels = baidu_place_search("宾馆", coords_q["lng"], coords_q["lat"])
+            if not hotels:
+                hotels = baidu_place_search("住宿", coords_q["lng"], coords_q["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(hotels, coords_q["lng"], coords_q["lat"], "🏨")}</div>', unsafe_allow_html=True)
+        with qtab3:
+            foods = baidu_place_search("美食", coords_q["lng"], coords_q["lat"])
+            if not foods:
+                foods = baidu_place_search("餐厅", coords_q["lng"], coords_q["lat"])
+            if not foods:
+                foods = baidu_place_search("小吃", coords_q["lng"], coords_q["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(foods, coords_q["lng"], coords_q["lat"], "🍜")}</div>', unsafe_allow_html=True)
 
-        filename = f"{destination or '旅行'}_行程规划.txt"
-        st.download_button(
-            label="📥 下载行程规划",
-            data=result.encode("utf-8"),
-            file_name=filename,
-            mime="text/plain",
-        )
+# ═══════════════════════════════════════
+#  RESULT CARD (after POI)
+# ═══════════════════════════════════════
+if gen_result:
+    st.markdown(f'<div class="result-container">{gen_result}</div>', unsafe_allow_html=True)
+
+    filename = f"{destination or '旅行'}_行程规划.txt"
+    st.download_button(
+        label="📥 下载行程规划",
+        data=gen_result.encode("utf-8"),
+        file_name=filename,
+        mime="text/plain",
+    )
 
 # ═══════════════════════════════════════
 #  FOOTER
