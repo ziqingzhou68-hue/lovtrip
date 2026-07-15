@@ -176,6 +176,7 @@ try:
     BASE_URL = st.secrets.get("OPENAI_BASE_URL", "https://tokenhub.tencentmaas.com/v1/")
     MODEL = st.secrets.get("MODEL_NAME", "kimi-k2.7-code")
     BAIDU_AK = st.secrets.get("BAIDU_MAP_AK", "")
+    PEXELS_KEY = st.secrets.get("PEXELS_API_KEY", "")
 except KeyError:
     st.error("⚠️ 未找到 API Key！请在 .streamlit/secrets.toml 或 Streamlit Cloud 中配置。")
     st.stop()
@@ -344,6 +345,24 @@ if (markers.length > 1) {{
     return html
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_pexels_photo(query):
+    """Fetch a real travel photo from Pexels API (cached 24h)"""
+    if not PEXELS_KEY:
+        return None
+    try:
+        url = f"https://api.pexels.com/v1/search?query={query}&per_page=1&locale=zh-CN"
+        headers = {"Authorization": PEXELS_KEY}
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+        photos = data.get("photos", [])
+        if photos:
+            return photos[0]["src"]["medium"]  # 350px wide, good for cards
+    except Exception:
+        pass
+    return None
+
+
 def render_poi_grid(pois, center_lng, center_lat, emoji="📍"):
     if not pois:
         return '<p style="text-align:center;color:#9b97b8;padding:1.5rem;">🔍 输入目的地后自动搜索周边热门地点</p>'
@@ -364,18 +383,20 @@ def render_poi_grid(pois, center_lng, center_lat, emoji="📍"):
         stars = "⭐" * min(5, max(1, int(float(score) // 20))) if score else ""
         grad = gradients[i % len(gradients)]
 
-        # Baidu Static Map thumbnail — location-specific real map image
+        # Real photo from Pexels API, fallback to Baidu static map
+        import urllib.parse
+        photo_url = get_pexels_photo(urllib.parse.quote(f"{name} travel landmark"))
         loc = poi.get("location", {})
         plng = loc.get("lng", center_lng) if loc else center_lng
         plat = loc.get("lat", center_lat) if loc else center_lat
-        map_img = f"https://api.map.baidu.com/staticimage/v2?ak={BAIDU_AK}&width=400&height=250&center={plng},{plat}&markers={plng},{plat}&markerStyles=l,{plng},{plat}&zoom=16"
+        fallback_img = f"https://api.map.baidu.com/staticimage/v2?ak={BAIDU_AK}&width=400&height=250&center={plng},{plat}&markers={plng},{plat}&markerStyles=l,{plng},{plat}&zoom=16"
 
         cards += f"""
         <div class="poi-card" style="animation-delay:{delay}s;">
             <div class="poi-img" style="position:relative;background:linear-gradient(135deg,{grad});overflow:hidden;">
-                <img src="{map_img}" alt="{name}" loading="lazy"
+                <img src="{photo_url or fallback_img}" alt="{name}" loading="lazy"
                     style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"
-                    onerror="this.style.display='none'"/>
+                    onerror="this.onerror=null;this.src='{fallback_img}';"/>
             </div>
             <div class="poi-body">
                 <h4 title="{name}">{name[:18]}{'…' if len(name) > 18 else ''}</h4>
