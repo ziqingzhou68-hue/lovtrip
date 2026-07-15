@@ -345,19 +345,18 @@ if (markers.length > 1) {{
     return html
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
 def get_pexels_photo(query):
-    """Fetch a real travel photo from Pexels API (cached 24h)"""
+    """Fetch a real travel photo from Pexels API"""
     if not PEXELS_KEY:
         return None
     try:
-        url = f"https://api.pexels.com/v1/search?query={query}&per_page=1&locale=zh-CN"
+        url = f"https://api.pexels.com/v1/search?query={query}&per_page=1&orientation=landscape&size=medium"
         headers = {"Authorization": PEXELS_KEY}
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=8)
         data = resp.json()
         photos = data.get("photos", [])
         if photos:
-            return photos[0]["src"]["medium"]  # 350px wide, good for cards
+            return photos[0]["src"]["medium"]
     except Exception:
         pass
     return None
@@ -579,6 +578,8 @@ with map_col:
                 poi_cats = {}
                 for cat in ["景点", "酒店", "美食"]:
                     pois = baidu_place_search(cat, coords["lng"], coords["lat"])
+                    if cat == "酒店" and not pois:
+                        pois = baidu_place_search("宾馆", coords["lng"], coords["lat"])
                     poi_cats[cat] = pois
 
                 map_markers = build_map_markers(coords, destination.strip(), poi_cats)
@@ -621,6 +622,10 @@ if destination.strip() and BAIDU_AK:
             st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, coords_q["lng"], coords_q["lat"], "🎯")}</div>', unsafe_allow_html=True)
         with qtab2:
             hotels = baidu_place_search("酒店", coords_q["lng"], coords_q["lat"])
+            if not hotels:
+                hotels = baidu_place_search("宾馆", coords_q["lng"], coords_q["lat"])
+            if not hotels:
+                hotels = baidu_place_search("住宿", coords_q["lng"], coords_q["lat"])
             st.markdown(f'<div class="poi-grid">{render_poi_grid(hotels, coords_q["lng"], coords_q["lat"], "🏨")}</div>', unsafe_allow_html=True)
         with qtab3:
             foods = baidu_place_search("美食", coords_q["lng"], coords_q["lat"])
@@ -695,6 +700,8 @@ if generate_clicked:
                     poi_cats2 = {}
                     for cat in ["景点", "酒店", "美食"]:
                         pois2 = baidu_place_search(cat, coords["lng"], coords["lat"])
+                        if cat == "酒店" and not pois2:
+                            pois2 = baidu_place_search("宾馆", coords["lng"], coords["lat"])
                         poi_cats2[cat] = pois2
                     map_markers2 = build_map_markers(coords, destination.strip(), poi_cats2)
                     map_html2 = render_map(coords["lng"], coords["lat"], map_markers2, height=520)
@@ -702,7 +709,24 @@ if generate_clicked:
                     st.components.v1.html(map_html2, height=540, scrolling=False)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-        st.success("✅ 行程规划完成！")
+        # ── Completion notice (prominent) ──
+        st.markdown("""
+        <div style="text-align:center; padding:2rem 1rem 0.5rem; animation:fadeInUp 0.6s ease-out;">
+            <span style="font-size:3rem; display:block; animation:float 1.5s ease-in-out infinite;">🎉</span>
+            <h2 style="color:#7c3aed !important; margin:0.5rem 0 0;">行程规划完成！</h2>
+            <p style="color:#8b889e; margin:0.25rem 0 1rem;">AI 已为您量身定制专属旅行方案</p>
+            <div style="animation:pulse 2s ease-in-out infinite; margin:1rem 0;">
+                <span style="display:inline-block; font-size:2rem; animation:bounceDown 1.5s ease-in-out infinite;">👇</span>
+                <p style="color:#7c3aed; font-weight:600; margin:0; font-size:0.9rem;">向下滑动查看完整行程</p>
+            </div>
+        </div>
+        <style>
+        @keyframes bounceDown {
+            0%,100%{transform:translateY(0)} 50%{transform:translateY(12px)}
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.markdown(f'<div class="result-container">{result}</div>', unsafe_allow_html=True)
 
         filename = f"{destination or '旅行'}_行程规划.txt"
