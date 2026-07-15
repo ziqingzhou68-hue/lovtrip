@@ -190,21 +190,36 @@ SYSTEM_PROMPT = """你是贴心专业、灵活全能的全域旅游规划助手�
 
 输出格式要求：使用清晰的markdown排版，包含emoji图标、分级标题、重点加粗，让行程方案赏心悦目。"""
 
-# ── Weather ──
+# ── Weather (Open-Meteo: free, no API key, global) ──
 def get_weather(city):
     try:
-        url = f"https://wttr.in/{city}?format=j1"
+        # First geocode to get coordinates
+        coords = baidu_geocode(city)
+        if not coords:
+            return None
+        # Open-Meteo API (free, no key needed)
+        url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={coords['lat']}&longitude={coords['lng']}"
+            f"&current_weather=true&timezone=auto"
+        )
         resp = requests.get(url, timeout=10)
         if resp.status_code != 200:
             return None
         data = resp.json()
-        current = data.get("current_condition", [{}])[0]
+        cw = data.get("current_weather", {})
+        if not cw:
+            return None
+        code = cw.get("weathercode", 0)
+        weather_map = {0:"☀️ 晴朗",1:"🌤️ 大部晴",2:"⛅ 多云",3:"☁️ 阴天",
+                       45:"🌫️ 雾",51:"🌦️ 小雨",61:"🌧️ 中雨",71:"🌨️ 小雪",
+                       80:"🌦️ 阵雨",95:"⛈️ 雷雨"}
         return {
-            "weather": current.get("weatherDesc", [{}])[0].get("value", "未知"),
-            "temp": f"{current.get('temp_C', '?')}°C",
-            "feels_like": f"{current.get('FeelsLikeC', '?')}°C",
-            "humidity": f"{current.get('humidity', '?')}%",
-            "wind": f"{current.get('windspeedKmph', '?')} km/h"
+            "weather": weather_map.get(code, f"代码{code}"),
+            "temp": f"{cw.get('temperature', '?')}°C",
+            "feels_like": f"{cw.get('temperature', '?')}°C",
+            "humidity": "—",
+            "wind": f"{cw.get('windspeed', '?')} km/h"
         }
     except Exception:
         return None
@@ -629,6 +644,10 @@ if destination.strip() and BAIDU_AK:
             st.markdown(f'<div class="poi-grid">{render_poi_grid(hotels, coords_q["lng"], coords_q["lat"], "🏨")}</div>', unsafe_allow_html=True)
         with qtab3:
             foods = baidu_place_search("美食", coords_q["lng"], coords_q["lat"])
+            if not foods:
+                foods = baidu_place_search("餐厅", coords_q["lng"], coords_q["lat"])
+            if not foods:
+                foods = baidu_place_search("小吃", coords_q["lng"], coords_q["lat"])
             st.markdown(f'<div class="poi-grid">{render_poi_grid(foods, coords_q["lng"], coords_q["lat"], "🍜")}</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════
@@ -709,22 +728,20 @@ if generate_clicked:
                     st.components.v1.html(map_html2, height=540, scrolling=False)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-        # ── Completion notice (prominent) ──
+        # ── Compact completion banner ──
         st.markdown("""
-        <div style="text-align:center; padding:2rem 1rem 0.5rem; animation:fadeInUp 0.6s ease-out;">
-            <span style="font-size:3rem; display:block; animation:float 1.5s ease-in-out infinite;">🎉</span>
-            <h2 style="color:#7c3aed !important; margin:0.5rem 0 0;">行程规划完成！</h2>
-            <p style="color:#8b889e; margin:0.25rem 0 1rem;">AI 已为您量身定制专属旅行方案</p>
-            <div style="animation:pulse 2s ease-in-out infinite; margin:1rem 0;">
-                <span style="display:inline-block; font-size:2rem; animation:bounceDown 1.5s ease-in-out infinite;">👇</span>
-                <p style="color:#7c3aed; font-weight:600; margin:0; font-size:0.9rem;">向下滑动查看完整行程</p>
+        <div style="
+            background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(232,93,158,0.08));
+            border: 1px solid rgba(124,58,237,0.15); border-radius: 20px;
+            padding: 1.2rem 1.5rem; margin: 0.5rem 0 1rem;
+            display: flex; align-items: center; gap: 1rem; animation: fadeInUp 0.5s ease-out;
+        ">
+            <span style="font-size:2.5rem;">🎉</span>
+            <div style="flex:1;">
+                <h4 style="color:#7c3aed; margin:0 0 0.2rem; font-size:1.1rem;">行程规划完成！向下滑动查看完整行程 👇</h4>
+                <p style="color:#8b889e; margin:0; font-size:0.85rem;">AI 已为您量身定制专属旅行方案</p>
             </div>
         </div>
-        <style>
-        @keyframes bounceDown {
-            0%,100%{transform:translateY(0)} 50%{transform:translateY(12px)}
-        }
-        </style>
         """, unsafe_allow_html=True)
 
         st.markdown(f'<div class="result-container">{result}</div>', unsafe_allow_html=True)
