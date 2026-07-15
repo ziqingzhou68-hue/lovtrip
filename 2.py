@@ -155,6 +155,7 @@ hr { border: none !important; height: 1px !important; background: linear-gradien
 @keyframes floatReverse { 0%,100%{transform:translateY(0)rotate(0)} 50%{transform:translateY(-12px)rotate(-3deg)} }
 @keyframes fadeInUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
 .float { animation: float 4s ease-in-out infinite; }
 .float-slow { animation: floatSlow 6s ease-in-out infinite; }
 .float-reverse { animation: floatReverse 5s ease-in-out infinite; }
@@ -343,39 +344,38 @@ if (markers.length > 1) {{
     return html
 
 
-def render_poi_grid(pois, emoji="📍"):
+def render_poi_grid(pois, center_lng, center_lat, emoji="📍"):
     if not pois:
         return '<p style="text-align:center;color:#9b97b8;padding:1.5rem;">🔍 输入目的地后自动搜索周边热门地点</p>'
 
-    # Beautiful gradient pairs for fallback
     gradients = [
         ("#ff6b8a,#e85d9e"), ("#7c3aed,#6366f1"), ("#f59e0b,#f97316"),
         ("#10b981,#34d399"), ("#ec4899,#f472b6"), ("#3b82f6,#06b6d4"),
         ("#8b5cf6,#a78bfa"), ("#ef4444,#f87171"), ("#14b8a6,#2dd4bf"),
     ]
 
-    import urllib.parse
     cards = ""
     for i, poi in enumerate(pois[:9]):
         name = poi.get("name", "未知")
         addr = poi.get("address", "") or ""
         score = poi.get("score", "") or ""
         price = poi.get("price", "") or ""
-        delay = 0.08 * (i % 3)
+        delay = 0.06 * (i % 3)
         stars = "⭐" * min(5, max(1, int(float(score) // 20))) if score else ""
         grad = gradients[i % len(gradients)]
 
-        # Try Picsum for real photos (Cloudflare CDN, works in China)
-        seed = urllib.parse.quote(f"{name}")
-        img_url = f"https://picsum.photos/seed/{seed}/400/300"
+        # Baidu Static Map thumbnail — location-specific real map image
+        loc = poi.get("location", {})
+        plng = loc.get("lng", center_lng) if loc else center_lng
+        plat = loc.get("lat", center_lat) if loc else center_lat
+        map_img = f"https://api.map.baidu.com/staticimage/v2?ak={BAIDU_AK}&width=400&height=250&center={plng},{plat}&markers={plng},{plat}&markerStyles=l,{plng},{plat}&zoom=16"
 
         cards += f"""
         <div class="poi-card" style="animation-delay:{delay}s;">
-            <div class="poi-img" style="position:relative;background:linear-gradient(135deg,{grad});">
-                <img src="{img_url}" alt="{name}" loading="lazy"
+            <div class="poi-img" style="position:relative;background:linear-gradient(135deg,{grad});overflow:hidden;">
+                <img src="{map_img}" alt="{name}" loading="lazy"
                     style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"
                     onerror="this.style.display='none'"/>
-                <span style="font-size:3rem;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">{emoji}</span>
             </div>
             <div class="poi-body">
                 <h4 title="{name}">{name[:18]}{'…' if len(name) > 18 else ''}</h4>
@@ -499,7 +499,6 @@ map_col, ctrl_col = st.columns([3, 2])
 with ctrl_col:
     st.markdown("### 💬 描述您的旅行想法")
 
-    # Build prompt from current sidebar values
     dest_val = st.session_state.get('dest', '') or '广州'
     dur_val = st.session_state.get('dur', '') or '3天2晚'
     budget_val = st.session_state.get('budget', '') or '适中'
@@ -508,7 +507,6 @@ with ctrl_col:
         f"出行模式为{travel_style}，出行人群为{traveler_type}，预算等级为{budget_val}。"
     )
 
-    # Sync sidebar → text area: if dest changed, update user_text
     last_dest = st.session_state.get('_last_dest', None)
     if last_dest != dest_val:
         st.session_state.user_text = default_prompt
@@ -516,69 +514,96 @@ with ctrl_col:
 
     user_input = st.text_area(
         "旅行需求描述",
-        height=150,
+        height=130,
         placeholder="例如：我想去北京玩3天，带父母一起，预算适中…",
         key="user_text",
         on_change=sync_dest_from_text,
     )
     generate_clicked = st.button("🚀 开始生成行程", type="primary", use_container_width=True)
 
-    # ── Quick POI Cards (below button) ──
-    if destination.strip() and BAIDU_AK:
-        coords_q = baidu_geocode(destination.strip())
-        if coords_q:
-            st.markdown("---")
-            st.markdown("#### 🔍 周边热门", )
-            qtab1, qtab2, qtab3 = st.tabs(["🎯 景点", "🏨 酒店", "🍜 美食"])
-            with qtab1:
-                spots = baidu_place_search("景点", coords_q["lng"], coords_q["lat"])
-                st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, "🎯")}</div>', unsafe_allow_html=True)
-            with qtab2:
-                hotels = baidu_place_search("酒店", coords_q["lng"], coords_q["lat"])
-                st.markdown(f'<div class="poi-grid">{render_poi_grid(hotels, "🏨")}</div>', unsafe_allow_html=True)
-            with qtab3:
-                foods = baidu_place_search("美食", coords_q["lng"], coords_q["lat"])
-                st.markdown(f'<div class="poi-grid">{render_poi_grid(foods, "🍜")}</div>', unsafe_allow_html=True)
+    # ── Travel Tips (fill right column) ──
+    st.markdown("---")
+    st.markdown("#### 💡 旅行贴士")
+    tips = [
+        ("📅", "最佳季节", "春秋两季气候宜人，避开节假日高峰"),
+        ("🎒", "行前准备", "提前预订机票酒店，下载离线地图"),
+        ("📸", "打卡攻略", "早出晚归避开人流，黄金时段拍照"),
+        ("🍜", "美食秘诀", "远离景区餐厅，钻进小巷寻地道味"),
+    ]
+    for emoji, title, desc in tips:
+        st.markdown(f"""
+        <div style="background:rgba(255,255,255,0.5); border-radius:14px; padding:0.6rem 0.8rem; margin:0.3rem 0;
+            border:1px solid rgba(124,58,237,0.08); display:flex; align-items:center; gap:0.6rem;">
+            <span style="font-size:1.4rem;">{emoji}</span>
+            <div><strong style="color:#1e1b4b; font-size:0.85rem;">{title}</strong>
+            <p style="margin:0; font-size:0.72rem; color:#8b889e;">{desc}</p></div>
+        </div>
+        """, unsafe_allow_html=True)
 
 with map_col:
-    # ── THE MAP (centerpiece) ──
+    # Map loading placeholder (used during AI generation)
+    map_placeholder = st.empty()
+
+    # ── THE MAP ──
     if destination.strip():
         coords = baidu_geocode(destination.strip())
         if coords:
+            with map_placeholder.container():
+                st.markdown("""
+                <div style="text-align:center; margin-bottom:0.25rem;">
+                    <span class="section-badge">🗺️ 目的地地图</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                poi_cats = {}
+                for cat in ["景点", "酒店", "美食"]:
+                    pois = baidu_place_search(cat, coords["lng"], coords["lat"])
+                    poi_cats[cat] = pois
+
+                map_markers = build_map_markers(coords, destination.strip(), poi_cats)
+                map_html = render_map(coords["lng"], coords["lat"], map_markers, height=520)
+                st.markdown('<div class="map-wrapper">', unsafe_allow_html=True)
+                st.components.v1.html(map_html, height=540, scrolling=False)
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            with map_placeholder.container():
+                st.info("🌍 正在查找目的地坐标…（如无结果请尝试更具体的地名）")
+    else:
+        with map_placeholder.container():
             st.markdown("""
-            <div style="text-align:center; margin-bottom:0.25rem;">
-                <span class="section-badge">🗺️ 目的地地图</span>
+            <div style="
+                background: rgba(255,255,255,0.35); backdrop-filter: blur(20px);
+                border: 2px dashed rgba(124,58,237,0.2); border-radius: 24px;
+                padding: 4rem 2rem; text-align: center; min-height: 440px;
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+            ">
+                <span style="font-size:4rem; display:block; margin-bottom:1rem;">🗺️</span>
+                <h3 style="color:#4a4567; margin:0 0 0.5rem;">输入目的地，探索你的专属地图</h3>
+                <p style="color:#9b97b8; margin:0;">在左侧边栏输入目的地 → 地图将自动加载</p>
+                <p style="color:#9b97b8; margin:0.25rem 0 0;">可拖拽缩放 · 点击标记查看详情 · 多维度探索</p>
             </div>
             """, unsafe_allow_html=True)
 
-            # Collect all POIs for map markers
-            poi_cats = {}
-            for cat in ["景点", "酒店", "美食"]:
-                pois = baidu_place_search(cat, coords["lng"], coords["lat"])
-                poi_cats[cat] = pois
-
-            map_markers = build_map_markers(coords, destination.strip(), poi_cats)
-            map_html = render_map(coords["lng"], coords["lat"], map_markers, height=580)
-            st.markdown('<div class="map-wrapper">', unsafe_allow_html=True)
-            st.components.v1.html(map_html, height=600, scrolling=False)
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.info("🌍 正在查找目的地坐标…（如无结果请尝试更具体的地名）")
-    else:
-        # Empty state — beautiful placeholder
+# ── POI Explorer (below map, full width) ──
+if destination.strip() and BAIDU_AK:
+    coords_q = baidu_geocode(destination.strip())
+    if coords_q:
+        st.markdown("<hr>", unsafe_allow_html=True)
         st.markdown("""
-        <div style="
-            background: rgba(255,255,255,0.35); backdrop-filter: blur(20px);
-            border: 2px dashed rgba(124,58,237,0.2); border-radius: 24px;
-            padding: 5rem 2rem; text-align: center; min-height: 500px;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-        ">
-            <span style="font-size:4rem; display:block; margin-bottom:1rem;">🗺️</span>
-            <h3 style="color:#4a4567; margin:0 0 0.5rem;">输入目的地，探索你的专属地图</h3>
-            <p style="color:#9b97b8; margin:0;">在左侧边栏输入目的地 → 地图将自动加载</p>
-            <p style="color:#9b97b8; margin:0.25rem 0 0;">可拖拽缩放 · 点击标记查看详情 · 多维度探索</p>
+        <div style="text-align:center; margin-bottom:0.25rem;">
+            <span class="section-badge">🔍 周边热门探索</span>
         </div>
         """, unsafe_allow_html=True)
+        qtab1, qtab2, qtab3 = st.tabs(["🎯 热门景点", "🏨 住宿推荐", "🍜 美食餐饮"])
+        with qtab1:
+            spots = baidu_place_search("景点", coords_q["lng"], coords_q["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, coords_q["lng"], coords_q["lat"], "🎯")}</div>', unsafe_allow_html=True)
+        with qtab2:
+            hotels = baidu_place_search("酒店", coords_q["lng"], coords_q["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(hotels, coords_q["lng"], coords_q["lat"], "🏨")}</div>', unsafe_allow_html=True)
+        with qtab3:
+            foods = baidu_place_search("美食", coords_q["lng"], coords_q["lat"])
+            st.markdown(f'<div class="poi-grid">{render_poi_grid(foods, coords_q["lng"], coords_q["lat"], "🍜")}</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════
 #  GENERATION RESULT (full width)
@@ -602,17 +627,24 @@ if generate_clicked:
             else:
                 st.sidebar.warning("⚠️ 天气查询失败")
 
-        # Visible loading state
-        loading_placeholder = st.empty()
-        loading_placeholder.markdown("""
-        <div style="text-align:center; padding:3rem 2rem; animation:pulse 2s ease-in-out infinite;">
-            <span style="font-size:3rem; display:block; margin-bottom:1rem;">✨</span>
+        # Loading animation IN MAP AREA
+        map_placeholder.empty()
+        map_placeholder.markdown("""
+        <div style="
+            background: rgba(255,255,255,0.5); backdrop-filter: blur(20px);
+            border-radius: 24px; padding: 6rem 2rem; text-align: center;
+            border: 1px solid rgba(124,58,237,0.12);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        ">
+            <span style="font-size:3.5rem; display:block; margin-bottom:1rem; animation: floatSlow 2s ease-in-out infinite;">✨</span>
             <h3 style="color:#7c3aed !important; margin:0 0 0.5rem;">AI 正在为您量身定制行程…</h3>
-            <p style="color:#8b889e; margin:0;">正在分析目的地、筛选景点、规划路线，请稍候</p>
+            <p style="color:#8b889e; margin:0;">正在分析目的地 · 筛选景点 · 规划最优路线</p>
+            <div style="margin-top:1.5rem; display:flex; gap:0.5rem; justify-content:center;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;animation:pulse 1.4s ease-in-out infinite;"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#e85d9e;animation:pulse 1.4s ease-in-out 0.2s infinite;"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#ff6b8a;animation:pulse 1.4s ease-in-out 0.4s infinite;"></span>
+            </div>
         </div>
-        <style>
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
-        </style>
         """, unsafe_allow_html=True)
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -633,13 +665,25 @@ if generate_clicked:
         )
         result = response.choices[0].message.content
 
-        # Clear loading placeholder
-        loading_placeholder.empty()
+        # Restore map after loading
+        map_placeholder.empty()
+        if destination.strip():
+            coords = baidu_geocode(destination.strip())
+            if coords:
+                with map_placeholder.container():
+                    poi_cats2 = {}
+                    for cat in ["景点", "酒店", "美食"]:
+                        pois2 = baidu_place_search(cat, coords["lng"], coords["lat"])
+                        poi_cats2[cat] = pois2
+                    map_markers2 = build_map_markers(coords, destination.strip(), poi_cats2)
+                    map_html2 = render_map(coords["lng"], coords["lat"], map_markers2, height=520)
+                    st.markdown('<div class="map-wrapper">', unsafe_allow_html=True)
+                    st.components.v1.html(map_html2, height=540, scrolling=False)
+                    st.markdown('</div>', unsafe_allow_html=True)
 
         st.success("✅ 行程规划完成！")
         st.markdown(f'<div class="result-container">{result}</div>', unsafe_allow_html=True)
 
-        # Download
         filename = f"{destination or '旅行'}_行程规划.txt"
         st.download_button(
             label="📥 下载行程规划",
