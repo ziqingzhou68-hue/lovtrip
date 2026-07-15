@@ -42,29 +42,30 @@ header[data-testid="stHeader"] { background: transparent !important; }
 h1, h2, h3, h4, h5 { font-family: 'Inter', sans-serif !important; font-weight: 700 !important; letter-spacing: -0.02em; }
 h1 { font-size: 2.2rem !important; background: linear-gradient(135deg, #7c3aed, #e85d9e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
-/* ── Sidebar ── */
+/* ── Sidebar (Light theme, matching main area) ── */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1e1b4b 0%, #2d1b69 40%, #3b1f8c 100%) !important;
-    border-right: 1px solid rgba(255,255,255,0.08) !important;
+    background: linear-gradient(180deg, #fdf2f8 0%, #fce7f3 25%, #ede9fe 60%, #f0f9ff 100%) !important;
+    border-right: 1px solid rgba(124,58,237,0.1) !important;
 }
 [data-testid="stSidebar"] .block-container { padding: 1.5rem 1.2rem; }
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 { color: #ffffff !important; }
-[data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown { color: rgba(255,255,255,0.85) !important; }
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 { color: #1e1b4b !important; }
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown { color: #4a4567 !important; }
 [data-testid="stSidebar"] input, [data-testid="stSidebar"] textarea {
-    background: rgba(255,255,255,0.9) !important; border: 2px solid rgba(255,255,255,0.3) !important;
+    background: rgba(255,255,255,0.85) !important; border: 2px solid rgba(124,58,237,0.25) !important;
     border-radius: 12px !important; color: #1e1b4b !important; padding: 10px 14px !important;
     font-weight: 500 !important;
 }
-[data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder { color: rgba(30,27,75,0.4) !important; }
+[data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder { color: rgba(30,27,75,0.35) !important; }
 [data-testid="stSidebar"] [data-baseweb="select"] > div {
-    background: rgba(255,255,255,0.9) !important; border-color: rgba(255,255,255,0.3) !important; color: #1e1b4b !important; font-weight: 500 !important;
+    background: rgba(255,255,255,0.85) !important; border-color: rgba(124,58,237,0.25) !important; color: #1e1b4b !important; font-weight: 500 !important;
 }
 [data-testid="stSidebar"] [data-baseweb="select"] * { color: #1e1b4b !important; }
 [data-testid="stSidebar"] [role="option"], [data-testid="stSidebar"] [role="listbox"] { background: #ffffff !important; color: #1e1b4b !important; }
 [data-testid="stSidebar"] ul[role="listbox"] li { color: #1e1b4b !important; background: #ffffff !important; }
 [data-testid="stSidebar"] ul[role="listbox"] li:hover { background: #ede9fe !important; color: #1e1b4b !important; }
-[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.1) !important; margin: 1rem 0 !important; }
-[data-testid="stSidebar"] .stAlert { background: rgba(255,255,255,0.1) !important; border-radius: 12px !important; color: #fff !important; }
+[data-testid="stSidebar"] hr { border-color: rgba(124,58,237,0.12) !important; margin: 1rem 0 !important; }
+[data-testid="stSidebar"] .stAlert { background: rgba(124,58,237,0.08) !important; border-radius: 12px !important; color: #1e1b4b !important; border: 1px solid rgba(124,58,237,0.15) !important; }
+[data-testid="stSidebar"] .st-emotion-cache-yfq0x5 { color: #1e1b4b !important; }
 
 /* ── Main Inputs ── */
 .main input, .main textarea {
@@ -345,8 +346,15 @@ if (markers.length > 1) {{
 def render_poi_grid(pois, emoji="📍"):
     if not pois:
         return '<p style="text-align:center;color:#9b97b8;padding:1.5rem;">🔍 输入目的地后自动搜索周边热门地点</p>'
+
+    # Beautiful gradient pairs for POI cards
+    gradients = [
+        ("#ff6b8a,#e85d9e"), ("#7c3aed,#6366f1"), ("#f59e0b,#f97316"),
+        ("#10b981,#34d399"), ("#ec4899,#f472b6"), ("#3b82f6,#06b6d4"),
+        ("#8b5cf6,#a78bfa"), ("#ef4444,#f87171"), ("#14b8a6,#2dd4bf"),
+    ]
+
     cards = ""
-    import urllib.parse
     for i, poi in enumerate(pois[:9]):
         name = poi.get("name", "未知")
         addr = poi.get("address", "") or ""
@@ -354,16 +362,13 @@ def render_poi_grid(pois, emoji="📍"):
         price = poi.get("price", "") or ""
         delay = 0.08 * (i % 3)
         stars = "⭐" * min(5, max(1, int(float(score) // 20))) if score else ""
-
-        # Real photo from Unsplash (no API key needed)
-        img_query = urllib.parse.quote(f"{name} landmark travel")
-        img_url = f"https://source.unsplash.com/400x300/?{img_query}"
-        # Fallback gradient if image fails
-        fallback = f"this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23ede9fe%22 width=%22400%22 height=%22300%22/><text x=%22200%22 y=%22155%22 text-anchor=%22middle%22 font-size=%2250%22>{emoji}</text></svg>'"
+        grad = gradients[i % len(gradients)]
 
         cards += f"""
         <div class="poi-card" style="animation-delay:{delay}s;">
-            <img class="poi-img" src="{img_url}" alt="{name}" loading="lazy" onerror="{fallback}"/>
+            <div class="poi-img" style="background:linear-gradient(135deg,{grad});display:flex;align-items:center;justify-content:center;">
+                <span style="font-size:3rem;">{emoji}</span>
+            </div>
             <div class="poi-body">
                 <h4 title="{name}">{name[:18]}{'…' if len(name) > 18 else ''}</h4>
                 <p class="poi-score">{stars} {score or ''}</p>
@@ -437,7 +442,7 @@ with st.sidebar:
     st.markdown("""
     <div style="text-align:center; margin-bottom:0.5rem;">
         <span style="font-size:2rem;">💜</span>
-        <h4 style="margin:0.25rem 0; color:#fff;">行程偏好设置</h4>
+        <h4 style="margin:0.25rem 0; color:#1e1b4b !important;">行程偏好设置</h4>
     </div>
     """, unsafe_allow_html=True)
 
@@ -461,6 +466,22 @@ with st.sidebar:
     st.markdown("#### 🌤️ 天气系统")
     enable_weather = st.toggle("启用天气自适应规划", value=True)
     weather_city = st.text_input("天气查询城市", placeholder="默认同目的地", key="wxcity")
+
+    # Auto-display weather when destination is entered
+    if enable_weather and (weather_city or destination).strip():
+        wx_query = (weather_city or destination).strip()
+        wx = get_weather(wx_query)
+        if wx:
+            st.markdown(f"""
+            <div style="background:rgba(124,58,237,0.06); border-radius:14px; padding:0.8rem; margin-top:0.5rem;
+                border:1px solid rgba(124,58,237,0.12); text-align:center;">
+                <p style="margin:0 0 0.3rem; font-size:0.8rem; color:#7c3aed; font-weight:600;">📍 {wx_query} 实时天气</p>
+                <p style="margin:0; font-size:1.3rem; font-weight:700; color:#1e1b4b;">{wx['weather']} {wx['temp']}</p>
+                <p style="margin:0.2rem 0 0; font-size:0.75rem; color:#6b6880;">
+                    体感 {wx['feels_like']} · 湿度 {wx['humidity']} · 风速 {wx['wind']}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════
 #  MAIN LAYOUT: Map Left | Controls Right
