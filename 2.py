@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from openai import OpenAI
 import json
+import re
 
 # ── Page Config ──
 st.set_page_config(
@@ -115,16 +116,21 @@ hr { border: none !important; height: 1px !important; background: linear-gradien
 
 .poi-grid { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; margin: 0.25rem 0 1rem; }
 .poi-card {
-    flex: 1; min-width: 160px; max-width: 240px; background: rgba(255,255,255,0.7);
+    flex: 1; min-width: 200px; max-width: 260px; background: rgba(255,255,255,0.85);
     backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.9);
-    border-radius: 18px; padding: 1rem 0.75rem; text-align: center;
-    box-shadow: 0 3px 16px rgba(124,58,237,0.05); transition: all 0.3s ease;
+    border-radius: 18px; overflow: hidden; text-align: left;
+    box-shadow: 0 3px 16px rgba(124,58,237,0.06); transition: all 0.35s cubic-bezier(0.25,0.8,0.25,1.2);
+    animation: fadeInUp 0.4s ease-out both;
 }
-.poi-card:hover { transform: translateY(-4px); box-shadow: 0 8px 28px rgba(124,58,237,0.12); }
-.poi-card .icon { font-size: 1.6rem; display: block; margin-bottom: 0.3rem; }
-.poi-card h4 { font-size: 0.85rem; color: #1e1b4b; margin: 0.2rem 0; font-weight: 700; }
+.poi-card:hover { transform: translateY(-6px); box-shadow: 0 12px 36px rgba(124,58,237,0.15); }
+.poi-card .poi-img {
+    width: 100%; height: 140px; object-fit: cover; display: block; background: linear-gradient(135deg, #ede9fe, #fce7f3);
+}
+.poi-card .poi-body { padding: 0.75rem 0.85rem; }
+.poi-card h4 { font-size: 0.9rem; color: #1e1b4b; margin: 0 0 0.3rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .poi-card .poi-score { font-size: 0.75rem; color: #e85d9e; margin: 0.1rem 0; }
-.poi-card .poi-addr { font-size: 0.72rem; color: #8b889e; margin: 0.1rem 0; line-height: 1.3; }
+.poi-card .poi-addr { font-size: 0.72rem; color: #8b889e; margin: 0.1rem 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.poi-card .poi-extra { font-size: 0.72rem; color: #a09db8; margin-top: 0.3rem; }
 
 .section-badge {
     display: inline-block; background: linear-gradient(135deg, rgba(124,58,237,0.1), rgba(232,93,158,0.1));
@@ -340,6 +346,7 @@ def render_poi_grid(pois, emoji="📍"):
     if not pois:
         return '<p style="text-align:center;color:#9b97b8;padding:1.5rem;">🔍 输入目的地后自动搜索周边热门地点</p>'
     cards = ""
+    import urllib.parse
     for i, poi in enumerate(pois[:9]):
         name = poi.get("name", "未知")
         addr = poi.get("address", "") or ""
@@ -347,13 +354,22 @@ def render_poi_grid(pois, emoji="📍"):
         price = poi.get("price", "") or ""
         delay = 0.08 * (i % 3)
         stars = "⭐" * min(5, max(1, int(float(score) // 20))) if score else ""
+
+        # Real photo from Unsplash (no API key needed)
+        img_query = urllib.parse.quote(f"{name} landmark travel")
+        img_url = f"https://source.unsplash.com/400x300/?{img_query}"
+        # Fallback gradient if image fails
+        fallback = f"this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22><rect fill=%22%23ede9fe%22 width=%22400%22 height=%22300%22/><text x=%22200%22 y=%22155%22 text-anchor=%22middle%22 font-size=%2250%22>{emoji}</text></svg>'"
+
         cards += f"""
-        <div class="poi-card" style="animation: fadeInUp 0.4s ease-out {delay}s both;">
-            <span class="icon">{emoji}</span>
-            <h4>{name[:16]}</h4>
-            <p class="poi-score">{stars} {score or ''}</p>
-            <p class="poi-addr">📍 {addr[:36]}{'…' if len(addr) > 36 else ''}</p>
-            <p class="poi-extra">{'💰' + price if price else ''}</p>
+        <div class="poi-card" style="animation-delay:{delay}s;">
+            <img class="poi-img" src="{img_url}" alt="{name}" loading="lazy" onerror="{fallback}"/>
+            <div class="poi-body">
+                <h4 title="{name}">{name[:18]}{'…' if len(name) > 18 else ''}</h4>
+                <p class="poi-score">{stars} {score or ''}</p>
+                <p class="poi-addr">📍 {addr[:40]}{'…' if len(addr) > 40 else ''}</p>
+                <p class="poi-extra">{'💰 ' + price if price else ''}</p>
+            </div>
         </div>"""
     return cards
 
@@ -381,6 +397,24 @@ def build_map_markers(dest_coords, dest_name, pois_by_cat):
 
 # ── Init OpenAI Client ──
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+
+# ── Session State Init ──
+if 'dest' not in st.session_state:
+    st.session_state.dest = ''
+if 'dur' not in st.session_state:
+    st.session_state.dur = ''
+if 'budget' not in st.session_state:
+    st.session_state.budget = '适中'
+
+# ── Sync callback: extract destination from text area → update sidebar ──
+def sync_dest_from_text():
+    """When user edits the text area, try to extract destination city"""
+    txt = st.session_state.get('user_text', '')
+    m = re.search(r'规划(.+?)的旅行方案', txt)
+    if m:
+        city = m.group(1).strip()
+        if city and city != st.session_state.get('dest', ''):
+            st.session_state.dest = city
 
 # ═══════════════════════════════════════
 #  HERO (compact)
@@ -435,16 +469,28 @@ map_col, ctrl_col = st.columns([3, 2])
 
 with ctrl_col:
     st.markdown("### 💬 描述您的旅行想法")
+
+    # Build prompt from current sidebar values
+    dest_val = st.session_state.get('dest', '') or '广州'
+    dur_val = st.session_state.get('dur', '') or '3天2晚'
+    budget_val = st.session_state.get('budget', '') or '适中'
     default_prompt = (
-        f"请为我规划{destination or '广州'}的旅行方案，出行时长{duration or '3天2晚'}，"
-        f"出行模式为{travel_style}，出行人群为{traveler_type}，预算等级为{budget}。"
+        f"请为我规划{dest_val}的旅行方案，出行时长{dur_val}，"
+        f"出行模式为{travel_style}，出行人群为{traveler_type}，预算等级为{budget_val}。"
     )
+
+    # Sync sidebar → text area: if dest changed, update user_text
+    last_dest = st.session_state.get('_last_dest', None)
+    if last_dest != dest_val:
+        st.session_state.user_text = default_prompt
+        st.session_state._last_dest = dest_val
+
     user_input = st.text_area(
         "旅行需求描述",
-        value=default_prompt,
         height=150,
         placeholder="例如：我想去北京玩3天，带父母一起，预算适中…",
-        key="user_req",
+        key="user_text",
+        on_change=sync_dest_from_text,
     )
     generate_clicked = st.button("🚀 开始生成行程", type="primary", use_container_width=True)
 
