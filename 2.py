@@ -594,6 +594,8 @@ with map_col:
                 for cat in ["景点", "酒店", "美食"]:
                     pois = baidu_place_search(cat, coords["lng"], coords["lat"])
                     if cat == "景点" and not pois:
+                        pois = baidu_place_search("景区", coords["lng"], coords["lat"])
+                    if cat == "景点" and not pois:
                         pois = baidu_place_search("旅游", coords["lng"], coords["lat"])
                     if cat == "酒店" and not pois:
                         pois = baidu_place_search("宾馆", coords["lng"], coords["lat"])
@@ -732,9 +734,13 @@ if destination.strip() and BAIDU_AK:
         with qtab1:
             spots = baidu_place_search("景点", coords_q["lng"], coords_q["lat"])
             if not spots:
+                spots = baidu_place_search("景区", coords_q["lng"], coords_q["lat"])
+            if not spots:
                 spots = baidu_place_search("旅游", coords_q["lng"], coords_q["lat"])
             if not spots:
                 spots = baidu_place_search("公园", coords_q["lng"], coords_q["lat"])
+            if not spots:
+                spots = baidu_place_search("广场", coords_q["lng"], coords_q["lat"])
             st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, coords_q["lng"], coords_q["lat"], "🎯")}</div>', unsafe_allow_html=True)
         with qtab2:
             hotels = baidu_place_search("酒店", coords_q["lng"], coords_q["lat"])
@@ -749,6 +755,10 @@ if destination.strip() and BAIDU_AK:
                 foods = baidu_place_search("餐厅", coords_q["lng"], coords_q["lat"])
             if not foods:
                 foods = baidu_place_search("小吃", coords_q["lng"], coords_q["lat"])
+            if not foods:
+                foods = baidu_place_search("火锅", coords_q["lng"], coords_q["lat"])
+            if not foods:
+                foods = baidu_place_search("面馆", coords_q["lng"], coords_q["lat"])
             st.markdown(f'<div class="poi-grid">{render_poi_grid(foods, coords_q["lng"], coords_q["lat"], "🍜")}</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════
