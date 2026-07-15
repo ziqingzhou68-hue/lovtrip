@@ -593,6 +593,8 @@ with map_col:
                 poi_cats = {}
                 for cat in ["景点", "酒店", "美食"]:
                     pois = baidu_place_search(cat, coords["lng"], coords["lat"])
+                    if cat == "景点" and not pois:
+                        pois = baidu_place_search("旅游", coords["lng"], coords["lat"])
                     if cat == "酒店" and not pois:
                         pois = baidu_place_search("宾馆", coords["lng"], coords["lat"])
                     poi_cats[cat] = pois
@@ -634,6 +636,10 @@ if destination.strip() and BAIDU_AK:
         qtab1, qtab2, qtab3 = st.tabs(["🎯 热门景点", "🏨 住宿推荐", "🍜 美食餐饮"])
         with qtab1:
             spots = baidu_place_search("景点", coords_q["lng"], coords_q["lat"])
+            if not spots:
+                spots = baidu_place_search("旅游", coords_q["lng"], coords_q["lat"])
+            if not spots:
+                spots = baidu_place_search("公园", coords_q["lng"], coords_q["lat"])
             st.markdown(f'<div class="poi-grid">{render_poi_grid(spots, coords_q["lng"], coords_q["lat"], "🎯")}</div>', unsafe_allow_html=True)
         with qtab2:
             hotels = baidu_place_search("酒店", coords_q["lng"], coords_q["lat"])
@@ -719,6 +725,8 @@ if generate_clicked:
                     poi_cats2 = {}
                     for cat in ["景点", "酒店", "美食"]:
                         pois2 = baidu_place_search(cat, coords["lng"], coords["lat"])
+                        if cat == "景点" and not pois2:
+                            pois2 = baidu_place_search("旅游", coords["lng"], coords["lat"])
                         if cat == "酒店" and not pois2:
                             pois2 = baidu_place_search("宾馆", coords["lng"], coords["lat"])
                         poi_cats2[cat] = pois2
@@ -728,7 +736,8 @@ if generate_clicked:
                     st.components.v1.html(map_html2, height=540, scrolling=False)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-        # ── Compact completion banner ──
+        # ── Celebration + Completion banner ──
+        st.balloons()
         st.markdown("""
         <div style="
             background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(232,93,158,0.08));
