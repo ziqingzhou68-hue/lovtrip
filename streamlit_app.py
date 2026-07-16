@@ -2,21 +2,21 @@ import streamlit as st
 import re
 from openai import OpenAI
 
-# ── LovTrip 模块导入 ──
-from config import API_KEY, BASE_URL, MODEL, BAIDU_AK, PEXELS_KEY, SYSTEM_PROMPT
-from components.styles import get_custom_css
-from components.map import render_map, build_map_markers
-from components.poi import render_poi_grid
-from services.weather import get_weather
-from services.baidu_map import baidu_geocode, baidu_place_search
-
-# ── Page Config ──
+# ── Page Config ──（必须在所有 st 操作之前）
 st.set_page_config(
     page_title="LovTrip — 智能旅游规划助手",
     page_icon="✈️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ── LovTrip 模块导入 ──（在 set_page_config 之后，确保 st.secrets 可用）
+from config import API_KEY, BASE_URL, MODEL, BAIDU_AK, PEXELS_KEY, SYSTEM_PROMPT
+from components.styles import get_custom_css
+from components.map import render_map, build_map_markers
+from components.poi import render_poi_grid
+from services.weather import get_weather
+from services.baidu_map import baidu_geocode, baidu_place_search
 
 # ── Custom CSS Injection ──
 st.markdown(get_custom_css(), unsafe_allow_html=True)
